@@ -1,8 +1,14 @@
 #include <stdio.h>
 
 int fibo(int n) {
-    if (n <= 1) return n;
-    return fibo(n - 1) + fibo(n - 2);
+    int  f, f1 = 0, f2 = 1;
+    for (int i = 1; i < n; i++){
+        printf("%d", f2);
+        f = f1;
+        f1 = f2;
+        f2 = f + f1;
+    }
+    return f2;
 }
 
 int main() {
@@ -11,10 +17,6 @@ int main() {
         return 1;
     }
 
-    for (int i = 0; i < n; i++) {
-        printf("%d", fibo(i));
-        if (i != n - 1) printf(" ");
-    }
-    printf("\n");
+    printf("%d", fibo(n));
     return 0;
 }
