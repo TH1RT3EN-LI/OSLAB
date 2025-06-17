@@ -9,10 +9,9 @@ Set the ENTRY point of the program to _start.
 SECTIONS
 {
     . = 0x80001000;
-    .text : { *(.text) } 
+    .text : { *(.text) }
+    . = 0x80002000;        /* 举例把 .data 放到另一个固定地址 */
     .data : { *(.data) }
+    . = 0x80003000;        /* 再把 .bss 放到后面 */
     .bss : { *(.bss) }
-    
-    
-    end = . ;
 }
