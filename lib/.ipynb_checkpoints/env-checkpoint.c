@@ -13,7 +13,7 @@ struct Env *envs = NULL;		// All environments
 struct Env *curenv = NULL;	        // the current env
 
 static struct Env_list env_free_list;	// Free list
-
+struct Env_list env_sched_list[2];      // Runnable list
 
 extern Pde *boot_pgdir;
 extern char *KERNEL_SP;
@@ -83,6 +83,7 @@ int envid2env(u_int envid, struct Env **penv, int checkperm)
         *penv = e;
         return 0;
 }
+
 /* Overview:
  *  Mark all environments in 'envs' as free and insert them into the env_free_list.
  *  Insert in reverse order,so that the first call to env_alloc() return envs[0].
@@ -191,6 +192,7 @@ env_setup_vm(struct Env *e)
  *      id , status , the sp register, CPU status , parent_id
  *      (the value of PC should NOT be set in env_alloc)
  */
+
 int
 env_alloc(struct Env **new, u_int parent_id)
 {
@@ -226,6 +228,7 @@ env_alloc(struct Env **new, u_int parent_id)
 	*new = e;
 	return 0;
 }
+
 /* Overview:
  *   This is a call back function for kernel's elf loader.
  * Elf loader extracts each segment of the given binary image.
@@ -366,6 +369,7 @@ load_icode(struct Env *e, u_char *binary, u_int size)
     /*Step 4:Set CPU's PC register as appropriate value. */
 	e->env_tf.pc = entry_point;
 }
+
 /* Overview:
  *  Allocates a new env with env_alloc, loads the named elf binary into
  *  it with load_icode and then set its priority value. This function is
@@ -378,22 +382,22 @@ load_icode(struct Env *e, u_char *binary, u_int size)
 void
 env_create_priority(u_char *binary, int size, int priority)
 {
-    struct Env *e;
-    int r;
-/*Step 1: Use env_alloc to alloc a new env. */
-    r = env_alloc(&e,0);
-    // printf("alloc OK!\n");
-    if(r != 0)
-    {
-        return;
-    }
-/*Step 2: assign priority to the new env. */
-    e->env_pri = priority;
-/*Step 3: Use load_icode() to load the named elf binary. */
-    load_icode(e, binary, size);
-    //printf("load OK!\n");
-/*Step 4: (By myself) add this envPCB to env_sched_list[0]*/
-    LIST_INSERT_TAIL(&env_sched_list[0], e, env_sched_link);
+        struct Env *e;
+		int r;
+    /*Step 1: Use env_alloc to alloc a new env. */
+		r = env_alloc(&e,0);
+		// printf("alloc OK!\n");
+		if(r != 0)
+		{
+			return;
+		}
+    /*Step 2: assign priority to the new env. */
+		e->env_pri = priority;
+    /*Step 3: Use load_icode() to load the named elf binary. */
+		load_icode(e, binary, size);
+		//printf("load OK!\n");
+	/*Step 4: (By myself) add this envPCB to env_sched_list[0]*/
+		LIST_INSERT_TAIL(&env_sched_list[0], e, env_sched_link);
 }
 /* Overview:
  * Allocates a new env with default priority value.
@@ -408,7 +412,6 @@ env_create(u_char *binary, int size)
 	 /*Step 1: Use env_create_priority to alloc a new env with priority 1 */
 	env_create_priority(binary, size, 1);
 }
-
 
 /* Overview:
  *  Frees env e and all memory it uses.
