@@ -56,51 +56,71 @@ lp_Print(void (*output)(void *, char *, int),
 
     int length;
 
-    for(;;) {
+    for (;;) {
 	{ 
-        
-        while ((*fmt) != '\0' && (*fmt) != '%')
-            OUTPUT(arg, fmt++, 1);
-        if (*fmt == '\0'){ 
+	    /* scan for the next '%' */
+		char *curFmt = fmt;
+		while (1) {
+			if (*curFmt == '\0') {
+				break;
+			}
+			if (*curFmt == '%') {
+				break;
+			}
+			curFmt ++;
+		}
 
-            break;}
+	    /* flush the string found so far */
+		OUTPUT(arg, fmt, curFmt-fmt);
+		fmt = curFmt;
+
+	    /* are we hitting the end? */
+		if (*fmt == '\0') {
+			break;
+		}
+
 	}
-    fmt += 1;
-    longFlag  = 0;
-    width     = 0;
-    prec = -1;  
-    ladjust   = 0;
-    padc      = ' ';  
-    while (*fmt == '-' || *fmt == '0') {
-        if (*fmt == '-')
-            ladjust = 1;
-        else 
-            padc = '0';
-        fmt++;
-    }
 
+	/* we found a '%' */
+	fmt ++;
 
-    while (IsDigit(*fmt)) {
-        width = width * 10 + Ctod(*fmt);
-        fmt++;
-    }
+	/* check for long */
+	padc = ' ';
+	ladjust = 0;
+	if (*fmt == '-') {
+		ladjust = 1;
+		fmt ++;
+	}
+	if (*fmt == '0') {
+		padc = '0';
+		fmt ++;
+	}
 
+	width = 0;
+	while (IsDigit(*fmt)) {
+		width = width * 10 + Ctod(*fmt);
+		fmt++;
+	}
 
-    if (*fmt == '.') {
-        fmt++;
-        prec = 0;
-        while (IsDigit(*fmt)) {
-            prec = prec * 10 + Ctod(*fmt);
-            fmt++;
-        }
-    }
+	/* check for other prefixes */
+	if (*fmt == '.') {
+		prec = 0;
+		fmt ++;
+		while (IsDigit(*fmt)) {
+			prec = prec * 10 + Ctod(*fmt);
+			fmt ++;
+		}
+	} else {
+		prec = 6;
+	}
 
+	/* check format flag */
+	longFlag = 0;
+	if (*fmt == 'l') {
+		longFlag = 1;
+		fmt ++;
+	}
 
-    if (*fmt == 'l') {
-        longFlag = 1;
-        fmt++;
-    }
-        
 	negFlag = 0;
 	switch (*fmt) {
 	 case 'b':
