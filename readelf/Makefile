@@ -13,7 +13,4 @@ readelf: main.o readelf.o
 
 clean:
 	rm -rf *.o
-	
-	if [ -e "readelf" ]; then      \
-        rm -f readelf;                 \
-	fi;
+	rm readelf
