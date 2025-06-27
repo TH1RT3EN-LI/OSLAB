@@ -84,25 +84,22 @@ _pipeisclosed(struct Fd *fd, struct Pipe *p)
 	// to the total number of readers and writers, then
 	// everybody left is what fd is.  So the other end of
 	// the pipe is closed.
+    int pfd,pfp,runs;
 
-	//writef("in closed: fd: %d p: %d\n", pageref(fd), pageref(p));
+	runs = -1;
 
-	int fdref, pref, runs;
-	do
-	{
+	while (env->env_runs != runs) {
 		runs = env->env_runs;
-		fdref = pageref(fd);
-		pref = pageref(p);
-	}while(runs != env->env_runs);
+		pfd = pageref(fd);
+		pfp = pageref(p);
+	}
 
-	if(fdref == pref)
-	{
-		return 1;
-	}
-	else
-	{
-		return 0;
-	}
+	int res = (pfd == pfp) ? 1 : 0;
+
+	return res;
+
+//	user_panic("_pipeisclosed not implemented");
+//	return 0;
 }
 
 int
@@ -129,37 +126,28 @@ piperead(struct Fd *fd, void *vbuf, u_int n, u_int offset)
 	// some bytes, return what you have instead of yielding.)
 	// If the pipe is empty and closed and you didn't copy any data out, return 0.
 	// Use _pipeisclosed to check whether the pipe is closed.
-	int i;
+    int i = 0;
 	struct Pipe *p;
 	char *rbuf;
-	p = (struct Pipe *)fd2data(fd);
+    int fdnum = fd2num(fd);
 
-	//writef("in read: fd: %d p: %d\n", pageref(fd), pageref(p));
-	while (p->p_rpos == p->p_wpos)
-	{
-		if (_pipeisclosed(fd, p))
-		{
-			return 0;
-		}
+	// Get pipe
+	p = (struct Pipe *)fd2data(fd);
+	
+	// check should we yield
+	while(p->p_rpos >= p->p_wpos && !pipeisclosed(fdnum)) {
 		syscall_yield();
 	}
+
 	rbuf = (char *)vbuf;
-	for (i = 0; i < n ; i++)
-	{
-		while (p->p_rpos == p->p_wpos)
-		{
-			//writef("read : w: %d r: %d n: %d\n", p->p_wpos, p->p_rpos, n);
-			if (i > 0 || _pipeisclosed(fd, p))
-			{
-				//writef("read return due to closed\n");
-				return i;
-			}
-			syscall_yield();
-		}
-		rbuf[i] = p->p_buf[p->p_rpos % BY2PIPE];
-		p->p_rpos++;
+	while (!(p->p_rpos >= p->p_wpos) && i < n){
+		rbuf[i++] = p->p_buf[(p->p_rpos++) % BY2PIPE];
 	}
-	return n;
+
+	return i;
+
+//	user_panic("piperead not implemented");
+//	return -E_INVAL;
 }
 
 static int
@@ -172,31 +160,30 @@ pipewrite(struct Fd *fd, const void *vbuf, u_int n, u_int offset)
 	// the data, wait for the pipe to empty and then keep copying.
 	// If the pipe is full and closed, return 0.
 	// Use _pipeisclosed to check whether the pipe is closed.
-	int i;
+    int i = 0;
 	struct Pipe *p;
-	char *wbuf;
-	
-	p = fd2data(fd); 
-	//writef("in read: fd: %d p: %d\n", pageref(fd), pageref(p));
+	const char *wbuf;
+    int fdnum = fd2num(fd);
 
-	wbuf = (char *)vbuf;
+	// Get pipe
+	p = (struct Pipe *)fd2data(fd);
 
-	for (i = 0; i < n; i++)
-	{
-		while (p->p_wpos - p->p_rpos == BY2PIPE)
-		{
-			//writef("write : w: %d r: %d n: %d\n", p->p_wpos, p->p_rpos, n);
-			if(_pipeisclosed(fd, p))
-			{
-				//writef("write return due to closed\n");
-				return 0;
-			}
+	wbuf = (const char *)vbuf;
+	// check is full
+	while ((p->p_wpos - p->p_rpos < BY2PIPE || !pipeisclosed(fdnum)) && i < n) {
+		if(p->p_wpos - p->p_rpos < BY2PIPE) {
+			p->p_buf[(p->p_wpos++) % BY2PIPE] = wbuf[i++];
+		} else {
 			syscall_yield();
 		}
-		p->p_buf[p->p_wpos % BY2PIPE] = wbuf[i];
-		p->p_wpos++;
 	}
+
+	if (!(p->p_wpos - p->p_rpos < BY2PIPE) && pipeisclosed(fdnum) && i < n) {
+		return 0;
+	}
+    //writef("%d %d %d\n", p->p_wpos, p->p_rpos, pipeisclosed(fdnum));
 	return n;
+//	user_panic("pipewrite not implemented");
 }
 
 static int
@@ -211,9 +198,8 @@ pipestat(struct Fd *fd, struct Stat *stat)
 static int
 pipeclose(struct Fd *fd)
 {
-	struct Fd *tmp = fd;
-	syscall_mem_unmap(0, fd);
-	syscall_mem_unmap(0, fd2data(tmp));
+    u_int va = fd2data(fd);
+    syscall_mem_unmap(0, fd);
+	syscall_mem_unmap(0, va);
 	return 0;
 }
-
