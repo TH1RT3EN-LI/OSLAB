@@ -1,4 +1,3 @@
-
 /*
  * BUAA MIPS OS Kernel file system format
  */
@@ -41,7 +40,7 @@ struct Block {
     uint32_t type;
 } disk[NBLOCK];
 
-// reverse: mutually transform between little endian and big endian.
+// reverse: transform little endian to little endian.
 void reverse(uint32_t *p) {
     uint8_t *x = (uint8_t *) p;
     uint32_t y = *(uint32_t *) x;
@@ -51,7 +50,7 @@ void reverse(uint32_t *p) {
     x[0] = (y >> 24) & 0xFF;
 }
 
-// reverse_block: reverse proper filed in a block.
+// Reverse_block: reverse proper filed in a block.
 void reverse_block(struct Block *b) {
     int i, j;
     struct Super *s;
@@ -120,8 +119,8 @@ void init_disk() {
     for(i = 0; i < nbitblock; ++i) {
         memset(disk[2+i].data, 0xff, NBLOCK/8);
     }
-    if(NBLOCK != nbitblock * BIT2BLK) {
-        diff = NBLOCK % BIT2BLK / 8;
+    if(NBLOCK != nbitblock * BY2BLK) {
+        diff = NBLOCK % BY2BLK / 8;
         memset(disk[2+(nbitblock-1)].data+diff, 0x00, BY2BLK - diff);
     }
 
@@ -186,17 +185,10 @@ void save_block_link(struct File *f, int nblk, int bno)
 
 // Make new block contians link to files in a directory.
 int make_link_block(struct File *dirf, int nblk) {
-    save_block_link(dirf, nblk, nextbno);
+	int curbno = next_block(BLOCK_FILE);
+    save_block_link(dirf, nblk, curbno);
     dirf->f_size += BY2BLK;
-    return next_block(BLOCK_FILE);
-}
-
-// try to avoid problem in large directory
-int large_make_link_block(struct File *dirf, int nblk) {
-    int tmpbno = next_block(BLOCK_FILE);
-    save_block_link(dirf, nblk, tmpbno);
-    dirf->f_size += BY2BLK;
-    return tmpbno;
+    return curbno;
 }
 
 // Overview:
@@ -207,58 +199,34 @@ int large_make_link_block(struct File *dirf, int nblk) {
 //      
 // Post-Condition:
 //      We ASSUM that this function will never fail
-//
-// Return:
-//      Return a unused struct File pointer
-// Hint: 
-//      use make_link_block function
+
 struct File *create_file(struct File *dirf) {
     struct File *dirblk;
-    int i, bno, found;
+    int i, bno, j;
     int nblk = dirf->f_size / BY2BLK;
     
-    // Your code here
-    // Step1: According to different range of nblk, make classified discussion to 
-    //        calculate the correct block number.
-    int needIndirect = (nblk > 10) ? 1 : 0;
-    found = 0;
-
-    // Step2: Find an unused pointer
-    for (i = 0; i < nblk && i < 10 && !found; i++) {
-        bno = dirf->f_direct[i];
-        dirblk = (struct File*)&disk[bno].data;
-        int j = 0;
-        for (j = 0; j < FILE2BLK && !found; j++) {
-           if (dirblk->f_name[0] == '\0') {
-               found = 1;
-               break;
-           }
-           dirblk++;
-        }
-    }
-
-    for (i = 10; needIndirect && i < nblk && !found; i++) {
-        bno = ((uint32_t *)(disk[dirf->f_indirect].data))[i];
-        dirblk = (struct File*)&disk[bno].data;
-
-        int j = 0;
-        for (j = 0; j < FILE2BLK && !found; j++) {
-           if (dirblk->f_name[0] == '\0') {
-               found = 1;
-               break;
-           }
-           dirblk++;
-        }
-    }
-
-    // can't find
-    if (!found) {
-        bno = large_make_link_block(dirf, nblk);
-        dirblk = (struct File*)&disk[bno].data;
-    }
-
-    //no "dirblk->f_dir = dirf;" needed because it is valid only in memory!
-    return dirblk;
+	for (i = 0; i < nblk; i++)
+	{
+		if (i < NDIRECT)
+		{
+			bno = dirf->f_direct[i];
+		}
+		else
+		{
+			bno = ((int *)(disk[dirf->f_indirect].data))[i];
+		}
+		dirblk = (struct File *)(disk[bno].data);
+		for (j = 0; j < FILE2BLK; j++)
+		{
+			if (dirblk[j].f_name[0] == '\0')
+			{
+				return &dirblk[j];
+			}
+		}
+	}
+	//not found
+	bno = make_link_block(dirf, nblk);
+	return (struct File *)disk[bno].data;
 }
 
 // Write file to disk under specified dir.

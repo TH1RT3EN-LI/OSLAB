@@ -6,33 +6,6 @@
 #include "lib.h"
 #include <mmu.h>
 
-int ideOperation(u_int op, u_int diskno, u_int offset) {
-	u_int ideMemBase = 0x13000000;
-	volatile u_char *ideOpAddr = (volatile u_char *)(ideMemBase + 0x0020);
-	volatile u_int *ideDiskAddr = (volatile u_int *)(ideMemBase + 0x0010);
-	volatile u_int *ideOffsetAddr = (volatile u_int *)(ideMemBase + 0x0000);
-	volatile u_int *ideResultAddr = (volatile u_int *)(ideMemBase + 0x0030);
-	const u_int ideOp_read = 0;
-	const u_int ideOp_write = 1;
-
-	if (op != ideOp_read && op != ideOp_write) {
-		user_panic("IDE Operation %d illegal!\n", op);
-	}
-	
-	if ((offset & (BY2SECT - 1)) != 0) {
-		user_panic("IDE Offset 0x%x is not aligned!\n", offset);
-	}
-    
-    syscall_write_dev(&diskno, ideDiskAddr, sizeof(diskno));
-    syscall_write_dev(&offset, ideOffsetAddr, sizeof(offset));
-    syscall_write_dev(&op, ideOpAddr, sizeof(op));
-    
-    int res = 0;
-    syscall_read_dev(&res, ideResultAddr, sizeof(res));
-
-	return res;
-}
-
 // Overview:
 // 	read data from IDE disk. First issue a read request through
 // 	disk register and then copy data from disk buffer
@@ -51,28 +24,44 @@ int ideOperation(u_int op, u_int diskno, u_int offset) {
 void
 ide_read(u_int diskno, u_int secno, void *dst, u_int nsecs)
 {
-    // 0x200: the size of a sector: 512 bytes.
-	int offset_begin = secno * 0x200;
-	int offset_end = offset_begin + nsecs * 0x200;
-	int offset = 0;
-
-	u_int ideDataBase = 0x13000000 + 0x4000;
-	const u_int ideOp_read = 0;
+	// 0x200: the size of a sector: 512 bytes.
+	u_int offset_begin = secno * 0x200;
+	u_int offset_end = offset_begin + nsecs * 0x200;
+	u_int offset = 0;
+	u_int dev_addr = 0x13000000;
+	u_char status = 0;
+	u_char read_value = 0;
 
 	while (offset_begin + offset < offset_end) {
-		int r = ideOperation(ideOp_read, diskno, offset_begin + offset);
-		// 0 means failure in ide!
-		if (r == 0) {
-			user_panic("IDE operation failed, op: %d, diskno: %d, offset: 0x%x\n", ideOp_read, diskno, offset_begin + offset);
+		u_int now_offset = offset_begin + offset;
+		if (syscall_write_dev((u_int)&diskno, dev_addr + 0x10, 4) < 0)
+		{
+			user_panic("ide_read error!");
 		}
-		r = syscall_read_dev(dst + offset, ideDataBase, BY2SECT);
-		if (r != 0) {
-			user_panic("Read_dev(IDE data) failed in IDE, va: 0x%x, return val is %d\n", dst + offset, r);
+		if (syscall_write_dev((u_int)&now_offset, dev_addr + 0x0, 4) < 0)
+		{
+			user_panic("ide_read error!");
 		}
-		offset += BY2SECT;
+		if (syscall_write_dev((u_int)&read_value, dev_addr + 0x20, 1) < 0)
+		{
+			user_panic("ide_read error!");
+		}
+		status = 0;
+		if (syscall_read_dev((u_int)&status, dev_addr + 0x30, 1) < 0)
+		{
+			user_panic("ide_read error!");
+		}
+		if (status == 0)
+		{
+			user_panic("ide read faild!");
+		}
+		if (syscall_read_dev((u_int)(dst + offset), dev_addr + 0x4000, 0x200) < 0)
+		{
+			user_panic("ide_read error!");
+		}
+		offset += 0x200;
 	}
-
-	return;
+	//writef("ide_read %x %s\n", offset_begin, dst);
 }
 
 
@@ -92,26 +81,43 @@ ide_read(u_int diskno, u_int secno, void *dst, u_int nsecs)
 void
 ide_write(u_int diskno, u_int secno, void *src, u_int nsecs)
 {
-    int offset_begin = secno * BY2SECT;
-	int offset_end = offset_begin + nsecs * BY2SECT;
-	int offset = 0;
-	
-	u_int ideDataBase = 0x13000000 + 0x4000;
-	const u_int ideOp_write = 1;
+	u_int offset_begin = secno * 0x200;
+	u_int offset_end = offset_begin + nsecs * 0x200;
+	u_int offset = 0;
+	u_int dev_addr = 0x13000000;
+	u_char status = 0;
+	u_char write_value = 1;
 
 	writef("diskno: %d\n", diskno);
-	while (offset_begin + offset < offset_end) {
-	    int r = syscall_write_dev(src + offset, ideDataBase, BY2SECT);
-		if (r != 0) {
-			user_panic("Write_dev(IDE data) failed in IDE, va: 0x%x\n", src + offset);
-		}
-		r = ideOperation(ideOp_write, diskno, offset_begin + offset);
-		// 0 means failure in ide!
-		if (r == 0) {
-			user_panic("IDE operation failed, op: %d, diskno: %d, offset: 0x%x\n", ideOp_write, diskno, offset_begin + offset);
-		}
-		offset += BY2SECT;
-    }
 
-	return;
+	while (offset_begin + offset < offset_end) {
+		u_int now_offset = offset_begin + offset;
+		if (syscall_write_dev((u_int)&diskno, dev_addr + 0x10, 4) < 0)
+		{
+			user_panic("ide_write error!");
+		}
+		if (syscall_write_dev((u_int)&now_offset, dev_addr + 0x0, 4) < 0)
+		{
+			user_panic("ide_write error!");
+		}
+		if (syscall_write_dev((u_int)(src + offset), dev_addr + 0x4000, 0x200) < 0)
+		{
+			user_panic("ide_write error!");
+		}
+		if (syscall_write_dev((u_int)&write_value, dev_addr + 0x20, 1) < 0)
+		{
+			user_panic("ide_write error!");
+		}
+		status = 0;
+		if (syscall_read_dev((u_int)&status, dev_addr + 0x30, 1) < 0)
+		{
+			user_panic("ide_write error!");
+		}
+		if (status == 0)
+		{
+			user_panic("ide write faild!");
+		}
+		offset += 0x200;
+	}
+	//writef("ide_write %x %s\n", offset_begin, src);
 }
