@@ -27,12 +27,9 @@ objects		  := $(boot_dir)/start.o			  \
 				 $(fs_dir)/*.x \
 				 $(mm_dir)/*.o
 
-.PHONY: all $(modules) clean run
+.PHONY: all $(modules) clean
 
 all: $(modules) vmlinux
-
-run: $(modules) vmlinux
-	cd gxemul && ./runVmlinux.sh
 
 vmlinux: $(modules)
 	$(LD) -o $(vmlinux_elf) -N -T $(link_script) $(objects)
@@ -46,5 +43,12 @@ clean:
 			$(MAKE) --directory=$$d clean; \
 		done; \
 	rm -rf *.o *~ $(vmlinux_elf)
+
+
+test: all
+	/OSLAB/gxemul -E testmips -C R3000 -M 64 -d gxemul/fs.img gxemul/vmlinux
+
+debug: all
+	/OSLAB/gxemul -E testmips -C R3000 -M 64 -d gxemul/fs.img -V gxemul/vmlinux
 
 include include.mk
