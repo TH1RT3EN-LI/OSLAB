@@ -46,13 +46,12 @@ struct pgfault_trap_frame {
 };
 
 
+/*** exercise 4.11 ***/
 void
 page_fault_handler(struct Trapframe *tf)
 {
     struct Trapframe PgTrapFrame;
     extern struct Env *curenv;
-
-	//printf("pgfault tf:%x Badvaddr:%x\n",tf, tf->cp0_badvaddr);
 
     bcopy(tf, &PgTrapFrame, sizeof(struct Trapframe));
 
@@ -65,7 +64,7 @@ page_fault_handler(struct Trapframe *tf)
             bcopy(&PgTrapFrame,(void *)curenv->env_xstacktop - sizeof(struct  Trapframe),sizeof(struct Trapframe));
         }
     // TODO: Set EPC to a proper value in the trapframe
-	tf->cp0_epc = curenv->env_pgfault_handler;
-	//printf("jumpto user pgfault\n");
+    tf->cp0_epc = curenv->env_pgfault_handler;
+
     return;
 }
