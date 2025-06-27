@@ -81,39 +81,30 @@ void user_bzero(void *v, u_int n)
 static void
 pgfault(u_int va)
 {
-	u_int tmp;
-	int ret;
-	//	writef("fork.c:pgfault():\t va:%x\n",va);
-    if ((((Pte *)(*vpt))[VPN(va)] & PTE_COW) == 0)
-	{
-		user_panic("User pgfault face a not COW page!");
-	}
+	u_int *tmp;
 	va = ROUNDDOWN(va, BY2PG);
-	tmp = USTACKTOP; // have a page of invalid memory.
-    //map the new page at a temporary place
-	ret = syscall_mem_alloc(0, tmp, PTE_V | PTE_R);
-	if (ret < 0)
-	{
-		user_panic("User pgfault alloc faild!");
+	tmp = UTOP - 2 * BY2PG;
+	u_int perm = (*vpt)[VPN(va)] & 0xfff;
+	//	writef("fork.c:pgfault():\t va:%x\n",va);
+	if ((perm & PTE_COW) != PTE_COW) {
+		user_panic("va is not PTE_COW!\n");
+	} else {
+		//map the new page at a temporary place
+		if (syscall_mem_alloc(0, tmp, perm & (~PTE_COW)|PTE_R) != 0) {
+			user_panic("sys_mem_alloc error!\n");
+		}
+		//copy the content
+		user_bcopy((void *)va, (void *)tmp, BY2PG);
+		//map the page on the appropriate place
+		if (syscall_mem_map(0, tmp, 0, va, perm & (~PTE_COW)|PTE_R) != 0) {
+			user_panic("sys_mem_map error!\n");
+		}
+		//unmap the temporary place
+		if (syscall_mem_unmap(0, tmp) != 0) {
+			user_panic("sys_mem_unmap error!\n");
+		}
 	}
-
-	//copy the content
-	user_bcopy(va, tmp, BY2PG);
-    //map the page on the appropriate place
-	ret = syscall_mem_map(0, tmp, 0, va, PTE_V | PTE_R);
-	if (ret < 0)
-	{
-		user_panic("User pgfault map faild!");
-	}
-    //unmap the temporary place
-	ret = syscall_mem_unmap(0, tmp);
-	if (ret < 0)
-	{
-		user_panic("User pgfault umap faild!");
-	}
-	return;
 }
-
 /* Overview:
  * 	Map our virtual page `pn` (address pn*BY2PG) into the target `envid`
  * at the same virtual address. 
