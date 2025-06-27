@@ -15,6 +15,10 @@ int block_is_free(u_int);
 u_int
 diskaddr(u_int blockno)
 {
+    if (super && blockno >= super->s_nblocks) {
+		user_panic("Invalid blockno: %d\n", blockno);
+	}
+	return DISKMAP + (blockno * BY2BLK);
 }
 
 // Overview:
@@ -64,9 +68,18 @@ block_is_dirty(u_int blockno)
 int
 map_block(u_int blockno)
 {
-	// Step 1: Decide whether this block is already mapped to a page of physical memory.
+    // Step 1: Decide whether this block has already mapped to a page of physical memory.
+	u_int va = block_is_mapped(blockno);
+	if (va) {
+		return 0;
+	}
 
-    // Step 2: Alloc a page of memory for this block via syscall.
+	// Step 2: Alloc a page of memory for this block via syscall.
+	va = diskaddr(blockno);
+	int r = syscall_mem_alloc(0, va, PTE_R | PTE_V);
+	
+	// NoRead!
+	return r;
 }
 
 // Overview:
@@ -74,17 +87,30 @@ map_block(u_int blockno)
 void
 unmap_block(u_int blockno)
 {
-	int r;
+    int r;
 
 	// Step 1: check if this block is mapped.
+	if (!block_is_mapped(blockno)) {
+		user_panic("Not a mapped block: %d\n", blockno);
+	}
 
-	// Step 2: if this block is used(not free) and dirty, it needs to be synced to disk,
-	// can't be unmap directly.
+	// Step 2: use block_is_free，block_is_dirty to check block , 
+	//if this block is used(not free) and dirty, it needs to be synced to disk: write_block
+	//can't be unmap directly.
+	if (!block_is_free(blockno) && block_is_dirty(blockno)) {
+		write_block(blockno);
+	}
 
-	// Step 3: use `syscall_mem_unmap` to unmap corresponding virtual memory.
+	// Step 3: use 'syscall_mem_unmap' to unmap corresponding virtual memory.
+	r = syscall_mem_unmap(0, diskaddr(blockno));
+	if (r) {
+		user_panic("Unmap Error, return code is: %d\n", r);
+	}
 
 	// Step 4: validate result of this unmap operation.
 	user_assert(!block_is_mapped(blockno));
+
+    return;
 }
 
 // Overview:
@@ -190,9 +216,16 @@ block_is_free(u_int blockno)
 void
 free_block(u_int blockno)
 {
-	// Step 1: Check if the parameter `blockno` is valid (`blockno` can't be zero).
-
+    // Step 1: Check if the parameter `blockno` is valid (`blockno` can't be zero).
+	if (blockno <= 0 || blockno >= super->s_nblocks) {
+		user_panic("Invaild blockno %ud\n", blockno);
+	}
 	// Step 2: Update the flag bit in bitmap.
+	u_int n = blockno % 32;
+	u_int offset = blockno / 32;
+	// you can use bit operation to update flags, such as  a |= (1 << n) .
+	bitmap[offset] |= (1 << n);
+	return;
 }
 
 // Overview:
@@ -285,8 +318,8 @@ read_bitmap(void)
 	void *blk = NULL;
 
 	// Step 1: calculate this number of bitmap blocks, and read all bitmap blocks to memory.
-	nbitmap = super->s_nblocks / BIT2BLK + 1;
-	for (i = 0; i < nbitmap; i++) {
+	nbitmap = (super->s_nblocks + BIT2BLK - 1) / BIT2BLK;
+    for (i = 0; i < nbitmap; i++) {
 		read_block(i + 2, blk, 0);
 	}
 	
@@ -514,21 +547,32 @@ file_dirty(struct File *f, u_int offset)
 int
 dir_lookup(struct File *dir, char *name, struct File **file)
 {
-	int r;
+    int r;
 	u_int i, j, nblock;
 	void *blk;
 	struct File *f;
 
 	// Step 1: Calculate nblock: how many blocks this dir have.
-
+	nblock = dir->f_size / BY2BLK;
 	for (i = 0; i < nblock; i++) {
 		// Step 2: Read the i'th block of the dir.
 		// Hint: Use file_get_block.
-
+		r = file_get_block(dir, i, &blk);
+		if (r) {
+			return r;
+		}
 
 		// Step 3: Find target file by file name in all files on this block.
 		// If we find the target file, set the result to *file and set f_dir field.
-		
+		f = (struct File *)blk;
+		for (j = 0; j < FILE2BLK; j++) {
+			if (strcmp(name, f->f_name) == 0) {
+				*file = f;
+				f->f_dir = dir;
+				return 0;
+			}
+            f++;
+		}
 	}
 
 	return -E_NOT_FOUND;
@@ -838,4 +882,3 @@ file_remove(char *path)
 
 	return 0;
 }
-

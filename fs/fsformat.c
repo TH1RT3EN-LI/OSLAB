@@ -1,6 +1,8 @@
+
 /*
  * BUAA MIPS OS Kernel file system format
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -301,12 +303,12 @@ int main(int argc, char **argv) {
 
     init_disk();
 
-//     if(argc < 3 || (strcmp(argv[2], "-r") == 0 && argc != 4)) {
-//         fprintf(stderr, "\
-// Usage: fsformat gxemul/fs.img files...\n\
-//        fsformat gxemul/fs.img -r DIR\n");
-//         exit(0);
-//     }
+    if(argc < 3 || (strcmp(argv[2], "-r") == 0 && argc != 4)) {
+        fprintf(stderr, "\
+Usage: fsformat gxemul/fs.img files...\n\
+       fsformat gxemul/fs.img -r DIR\n");
+        exit(0);
+    }
 
     if(strcmp(argv[2], "-r") == 0) {
         for (i = 3; i < argc; ++i) {

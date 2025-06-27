@@ -39,6 +39,10 @@ int is_elf_format(u_char *binary)
  *   Return 0 if success. Otherwise return < 0.
  *   If success, output address of every section in ELF.
  */
+
+/*
+    Exercise 1.2. Please complete func "readelf". 
+*/
 int readelf(u_char *binary, int size)
 {
         Elf32_Ehdr *ehdr = (Elf32_Ehdr *)binary;
@@ -59,16 +63,16 @@ int readelf(u_char *binary, int size)
         }
 
         // get section table addr, section header number and section header size.
-	ptr_sh_table = binary + ehdr->e_shoff;
-	sh_entry_count = ehdr->e_shnum;
-	sh_entry_size = ehdr->e_shentsize;
-
+		shdr = (Elf32_Shdr *)(ehdr->e_shoff + (u_char *)binary);
+		sh_entry_count = ehdr->e_shnum;
+		sh_entry_size = ehdr->e_shentsize;
         // for each section header, output section number and section addr.
-	for (Nr = 0; Nr < sh_entry_count; Nr++, ptr_sh_table += sh_entry_size) {
-		shdr = (Elf32_Shdr *)ptr_sh_table;
-		printf("%d:0x%x\n", Nr, shdr->sh_addr);
-	}
+		int i = 0;
+		for (i = 0; i < sh_entry_count; i++) {
+			printf("%d:0x%x\n", i, shdr[i].sh_addr);
+		}
+        // hint: section number starts at 0.
+
 
         return 0;
 }
-
