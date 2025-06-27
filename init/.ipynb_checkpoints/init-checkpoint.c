@@ -20,17 +20,15 @@ void mips_init()
 
 	// Lab 3 user environment initialization functions
 	env_init();
-	
-    ENV_CREATE(user_fstest);
-    ENV_CREATE(fs_serv);
-    
-    // initialize exception vector.
+	// initialize exception vector.
 	trap_init();
 	// initialize PIT.
 	kclock_init();
 
 	// Create process using macro 'ENC_CREATE'
 	// For more details about 'ENV_CREATE', see include/env.h
+	ENV_CREATE(user_fstest);
+	ENV_CREATE(fs_serv);
 
 	panic("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
 
