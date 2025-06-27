@@ -1,323 +1,280 @@
 #include "lib.h"
-#include "fd.h"
-#include <mmu.h>
-#include <env.h>
+#include <fs.h>
 
 #define debug 0
 
-#define MAXFD 32
-#define FILEBASE 0x60000000
-#define FDTABLE (FILEBASE-PDMAP)
+static int file_close(struct Fd *fd);
+static int file_read(struct Fd *fd, void *buf, u_int n, u_int offset);
+static int file_write(struct Fd *fd, const void *buf, u_int n, u_int offset);
+static int file_stat(struct Fd *fd, struct Stat *stat);
 
-#define INDEX2FD(i)	(FDTABLE+(i)*BY2PG)
-#define INDEX2DATA(i)	(FILEBASE+(i)*PDMAP)
-
-static struct Dev *devtab[] = {
-	&devfile,
-	&devcons,
-	&devpipe,
-	0
+struct Dev devfile = {
+	.dev_id =	'f',
+	.dev_name =	"file",
+	.dev_read =	file_read,
+	.dev_write =	file_write,
+	.dev_close =	file_close,
+	.dev_stat =	file_stat,
 };
 
+
+// Overview:
+//	Open a file (or directory).
+//
+// Returns:
+//	the file descriptor onsuccess,
+//	< 0 on failure.
 int
-dev_lookup(int dev_id, struct Dev **dev)
+open(const char *path, int mode)
 {
-	int i;
-
-	for (i = 0; devtab[i]; i++)
-		if (devtab[i]->dev_id == dev_id) {
-			*dev = devtab[i];
-			return 0;
-		}
-
-	writef("[%08x] unknown device type %d\n", env->env_id, dev_id);
-	return -E_INVAL;
-}
-
-int
-fd_alloc(struct Fd **fd)
-{
-	// Find the smallest i from 0 to MAXFD-1 that doesn't have
-	// its fd page mapped.  Set *fd to the fd page virtual address.
-	// (Do not allocate a page.  It is up to the caller to allocate
-	// the page.  This means that if someone calls fd_alloc twice
-	// in a row without allocating the first page we return, we'll
-	// return the same page the second time.)
-	// Return 0 on success, or an error code on error.
-	u_int va;
-	u_int fdno;
-
-	for (fdno = 0; fdno < MAXFD - 1; fdno++) {
-		va = INDEX2FD(fdno);
-
-		if (((* vpd)[va / PDMAP] & PTE_V) == 0) {
-			*fd = (struct Fd *)va;
-			return 0;
-		}
-
-		if (((* vpt)[va / BY2PG] & PTE_V) == 0) {	//the fd is not used
-			*fd = (struct Fd *)va;
-			return 0;
-		}
-	}
-
-	return -E_MAX_OPEN;
-}
-
-void
-fd_close(struct Fd *fd)
-{
-	syscall_mem_unmap(0, (u_int)fd);
-}
-
-int
-fd_lookup(int fdnum, struct Fd **fd)
-{
-	// Check that fdnum is in range and mapped.  If not, return -E_INVAL.
-	// Set *fd to the fd page virtual address.  Return 0.
-	u_int va;
-
-	if (fdnum >= MAXFD) {
-		return -E_INVAL;
-	}
-
-	va = INDEX2FD(fdnum);
-
-	if (((* vpt)[va / BY2PG] & PTE_V) != 0) {	//the fd is used
-		*fd = (struct Fd *)va;
-		return 0;
-	}
-
-	return -E_INVAL;
-}
-
-u_int
-fd2data(struct Fd *fd)
-{
-	return INDEX2DATA(fd2num(fd));
-}
-
-int
-fd2num(struct Fd *fd)
-{
-	return ((u_int)fd - FDTABLE) / BY2PG;
-}
-int
-num2fd(int fd)
-{
-	return fd * BY2PG + FDTABLE;
-}
-
-int
-close(int fdnum)
-{
-	int r;
-	struct Dev *dev;
 	struct Fd *fd;
+	struct Filefd *ffd;
+	u_int size, fileid;
+	int r;
+	u_int va;
+	u_int i;
 
-	if ((r = fd_lookup(fdnum, &fd)) < 0
-		||  (r = dev_lookup(fd->fd_dev_id, &dev)) < 0) {
+	// Step 1: Alloc a new Fd, return error code when fail to alloc.
+	// Hint: Please use fd_alloc.
+	r = fd_alloc(&fd);
+	if (r < 0)
+	{
 		return r;
 	}
 
-	r = (*dev->dev_close)(fd);
-	fd_close(fd);
-	return r;
-}
-
-void
-close_all(void)
-{
-	int i;
-
-	for (i = 0; i < MAXFD; i++) {
-		close(i);
-	}
-}
-
-int
-dup(int oldfdnum, int newfdnum)
-{
-	int i, r;
-	u_int ova, nva, pte;
-	struct Fd *oldfd, *newfd;
-
-	if ((r = fd_lookup(oldfdnum, &oldfd)) < 0) {
+	// Step 2: Get the file descriptor of the file to open.
+	r = fsipc_open(path, mode, fd);
+	if (r < 0)
+	{
 		return r;
 	}
 
-	close(newfdnum);
-	newfd = (struct Fd *)INDEX2FD(newfdnum);
-	ova = fd2data(oldfd);
-	nva = fd2data(newfd);
+	// Step 3: Set the start address storing the file's content. Set size and fileid correctly.
+	// Hint: Use fd2data to get the start address.
+	va = fd2data(fd);
+	ffd = (struct Filefd*)fd;
+	fileid = ffd->f_fileid;
+	size = ffd->f_file.f_size;
 
-	if ((r = syscall_mem_map(0, (u_int)oldfd, 0, (u_int)newfd,
-							 ((*vpt)[VPN(oldfd)]) & (PTE_V | PTE_R | PTE_LIBRARY))) < 0) {
-		goto err;
-	}
-
-	if ((* vpd)[PDX(ova)]) {
-		for (i = 0; i < PDMAP; i += BY2PG) {
-			pte = (* vpt)[VPN(ova + i)];
-
-			if (pte & PTE_V) {
-				// should be no error here -- pd is already allocated
-				if ((r = syscall_mem_map(0, ova + i, 0, nva + i,
-										 pte & (PTE_V | PTE_R | PTE_LIBRARY))) < 0) {
-					goto err;
-				}
-			}
+	// Step 4: Map the file content into memory.
+	for (i = 0; i < size; i += BY2BLK)
+	{
+		r = fsipc_map(fileid, i, va + i);
+		if (r < 0)
+		{
+			return r;
 		}
 	}
 
-	return newfdnum;
-
-err:
-	syscall_mem_unmap(0, (u_int)newfd);
-
-	for (i = 0; i < PDMAP; i += BY2PG) {
-		syscall_mem_unmap(0, nva + i);
-	}
-
-	return r;
+	// Step 5: Return file descriptor.
+	// Hint: Use fd2num.
+	return fd2num(fd);
 }
 
 // Overview:
-//	Read 'n' bytes from 'fd' at the current seek position into 'buf'.
-//
-// Post-Condition:
-//	Update seek position.
-//	Return the number of bytes read successfully.
-//		< 0 on error
+//	Close a file descriptor
 int
-read(int fdnum, void *buf, u_int n)
+file_close(struct Fd *fd)
 {
 	int r;
-	struct Dev *dev;
-	struct Fd *fd;
+	struct Filefd *ffd;
+	u_int va, size, fileid;
+	u_int i;
 
-	// Step 1: Get fd and dev.
-	if ((r = fd_lookup(fdnum, &fd)) < 0 ||  (r = dev_lookup(fd->fd_dev_id, &dev)) < 0)
-	{
+	ffd = (struct Filefd *)fd;
+	fileid = ffd->f_fileid;
+	size = ffd->f_file.f_size;
+
+	// Set the start address storing the file's content.
+	va = fd2data(fd);
+
+	// Tell the file server the dirty page.
+	for (i = 0; i < size; i += BY2PG) {
+		fsipc_dirty(fileid, i);
+	}
+
+	// Request the file server to close the file with fsipc.
+	if ((r = fsipc_close(fileid)) < 0) {
+		writef("cannot close the file\n");
 		return r;
 	}
 
-	// Step 2: Check open mode.
-	if ((fd->fd_omode & O_ACCMODE) == O_WRONLY)
-	{
-		writef("[%08x] read %d -- bad mode\n", env->env_id, fdnum);
-		return -E_INVAL;
+	// Unmap the content of file, release memory.
+	if (size == 0) {
+		return 0;
 	}
-
-	if (debug)
-	{
-		writef("read %d %p %d via dev %s\n", fdnum, buf, n, dev->dev_name);
-	}
-
-	// Step 3: Read starting from seek position.
-	r = (* dev->dev_read)(fd, buf, n, fd->fd_offset);
-
-	// Step 4: Update seek position and set '\0' at the end of buf.
-	if (r > 0)
-	{
-		fd->fd_offset += r;
-	}
-	((char *)buf)[r] = '\0';
-	return r;
-}
-
-int
-readn(int fdnum, void *buf, u_int n)
-{
-	int m, tot;
-
-	for (tot = 0; tot < n; tot += m) {
-		m = read(fdnum, (char *)buf + tot, n - tot);
-
-		if (m < 0) {
-			return m;
-		}
-
-		if (m == 0) {
-			break;
+	for (i = 0; i < size; i += BY2PG) {
+		if ((r = syscall_mem_unmap(0, va + i)) < 0) {
+			writef("cannont unmap the file.\n");
+			return r;
 		}
 	}
-
-	return tot;
+	return 0;
 }
 
-int
-write(int fdnum, const void *buf, u_int n)
+// Overview:
+//	Read 'n' bytes from 'fd' at the current seek position into 'buf'. Since files
+//	are memory-mapped, this amounts to a user_bcopy() surrounded by a little red
+//	tape to handle the file size and seek pointer.
+static int
+file_read(struct Fd *fd, void *buf, u_int n, u_int offset)
 {
-	int r;
-	struct Dev *dev;
-	struct Fd *fd;
+	u_int size;
+	struct Filefd *f;
+	f = (struct Filefd *)fd;
 
-	if ((r = fd_lookup(fdnum, &fd)) < 0
-		||  (r = dev_lookup(fd->fd_dev_id, &dev)) < 0) {
-		return r;
+	// Avoid reading past the end of file.
+	size = f->f_file.f_size;
+
+	if (offset > size) {
+		return 0;
 	}
 
-	if ((fd->fd_omode & O_ACCMODE) == O_RDONLY) {
-		writef("[%08x] write %d -- bad mode\n", env->env_id, fdnum);
-		return -E_INVAL;
+	if (offset + n > size) {
+		n = size - offset;
 	}
 
-	if (debug) writef("write %d %p %d via dev %s\n",
-						  fdnum, buf, n, dev->dev_name);
-
-	r = (*dev->dev_write)(fd, buf, n, fd->fd_offset);
-
-	if (r > 0) {
-		fd->fd_offset += r;
-	}
-
-	return r;
+	user_bcopy((char *)fd2data(fd) + offset, buf, n);
+	return n;
 }
 
+// Overview:
+//	Find the virtual address of the page that maps the file block
+//	starting at 'offset'.
 int
-seek(int fdnum, u_int offset)
+read_map(int fdnum, u_int offset, void **blk)
 {
 	int r;
+	u_int va;
 	struct Fd *fd;
 
 	if ((r = fd_lookup(fdnum, &fd)) < 0) {
 		return r;
 	}
 
-	fd->fd_offset = offset;
+	if (fd->fd_dev_id != devfile.dev_id) {
+		return -E_INVAL;
+	}
+
+	va = fd2data(fd) + offset;
+
+	if (offset >= MAXFILESIZE) {
+		return -E_NO_DISK;
+	}
+
+	if (!((* vpd)[PDX(va)]&PTE_V) || !((* vpt)[VPN(va)]&PTE_V)) {
+		return -E_NO_DISK;
+	}
+
+	*blk = (void *)va;
 	return 0;
 }
 
-
-int fstat(int fdnum, struct Stat *stat)
+// Overview:
+//	Write 'n' bytes from 'buf' to 'fd' at the current seek position.
+static int
+file_write(struct Fd *fd, const void *buf, u_int n, u_int offset)
 {
 	int r;
-	struct Dev *dev;
-	struct Fd *fd;
+	u_int tot;
+	struct Filefd *f;
 
-	if ((r = fd_lookup(fdnum, &fd)) < 0
-		||  (r = dev_lookup(fd->fd_dev_id, &dev)) < 0) {
+	f = (struct Filefd *)fd;
+
+	// Don't write more than the maximum file size.
+	tot = offset + n;
+
+	if (tot > MAXFILESIZE) {
+		return -E_NO_DISK;
+	}
+
+	// Increase the file's size if necessary
+	if (tot > f->f_file.f_size) {
+		if ((r = ftruncate(fd2num(fd), tot)) < 0) {
+			return r;
+		}
+	}
+
+	// Write the data
+	user_bcopy(buf, (char *)fd2data(fd) + offset, n);
+	return n;
+}
+
+static int
+file_stat(struct Fd *fd, struct Stat *st)
+{
+	struct Filefd *f;
+
+	f = (struct Filefd *)fd;
+
+	strcpy(st->st_name, (char *)f->f_file.f_name);
+	st->st_size = f->f_file.f_size;
+	st->st_isdir = f->f_file.f_type == FTYPE_DIR;
+	return 0;
+}
+
+// Overview:
+//	Truncate or extend an open file to 'size' bytes
+int
+ftruncate(int fdnum, u_int size)
+{
+	int i, r;
+	struct Fd *fd;
+	struct Filefd *f;
+	u_int oldsize, va, fileid;
+
+	if (size > MAXFILESIZE) {
+		return -E_NO_DISK;
+	}
+
+	if ((r = fd_lookup(fdnum, &fd)) < 0) {
 		return r;
 	}
 
-	stat->st_name[0] = 0;
-	stat->st_size = 0;
-	stat->st_isdir = 0;
-	stat->st_dev = dev;
-	return (*dev->dev_stat)(fd, stat);
-}
-
-int
-stat(const char *path, struct Stat *stat)
-{
-	int fd, r;
-
-	if ((fd = open(path, O_RDONLY)) < 0) {
-		return fd;
+	if (fd->fd_dev_id != devfile.dev_id) {
+		return -E_INVAL;
 	}
 
-	r = fstat(fd, stat);
-	close(fd);
-	return r;
+	f = (struct Filefd *)fd;
+	fileid = f->f_fileid;
+	oldsize = f->f_file.f_size;
+	f->f_file.f_size = size;
+
+	if ((r = fsipc_set_size(fileid, size)) < 0) {
+		return r;
+	}
+
+	va = fd2data(fd);
+
+	// Map any new pages needed if extending the file
+	for (i = ROUND(oldsize, BY2PG); i < ROUND(size, BY2PG); i += BY2PG) {
+		if ((r = fsipc_map(fileid, i, va + i)) < 0) {
+			fsipc_set_size(fileid, oldsize);
+			return r;
+		}
+	}
+
+	// Unmap pages if truncating the file
+	for (i = ROUND(size, BY2PG); i < ROUND(oldsize, BY2PG); i += BY2PG)
+		if ((r = syscall_mem_unmap(0, va + i)) < 0) {
+			user_panic("ftruncate: syscall_mem_unmap %08x: %e", va + i, r);
+		}
+
+	return 0;
+}
+
+// Overview:
+//	Delete a file/directory.
+int
+remove(const char *path)
+{
+	return fsipc_remove(path);
+}
+
+// Overview:
+//	Synchronize disk with buffer cache
+int
+sync(void)
+{
+	return fsipc_sync();
 }

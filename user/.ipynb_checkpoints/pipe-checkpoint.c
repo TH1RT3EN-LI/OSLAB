@@ -216,4 +216,3 @@ pipeclose(struct Fd *fd)
 	syscall_mem_unmap(0, fd2data(tmp));
 	return 0;
 }
-
