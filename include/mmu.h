@@ -158,8 +158,10 @@ extern volatile Pde *vpd[];
 		u_long ppn = PPN(pa);					\
 		if (ppn >= npage)					\
 			panic("KADDR called with invalid pa %08lx", (u_long)pa);\
-		(pa) + ULIM;					\
+		(pa) + ULIM;						\
 	})
+
+
 
 #define assert(x)	\
 	do {	if (!(x)) panic("assertion failed: %s", #x); } while (0)
