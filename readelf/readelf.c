@@ -18,15 +18,17 @@
  */
 int is_elf_format(u_char *binary)
 {
-        Elf32_Ehdr *ehdr = (Elf32_Ehdr *)binary;
+        Elf32_Ehdr *ehdr = (Elf32_Ehdr *)binary; // ELF头结构体指针
+        // 检查魔数，即ELF文件格式的标识，位于文件开头的4个字节
         if (ehdr->e_ident[EI_MAG0] == ELFMAG0 &&
-                ehdr->e_ident[EI_MAG1] == ELFMAG1 &&
-                ehdr->e_ident[EI_MAG2] == ELFMAG2 &&
-                ehdr->e_ident[EI_MAG3] == ELFMAG3) {
-                return 1;
+            ehdr->e_ident[EI_MAG1] == ELFMAG1 &&
+            ehdr->e_ident[EI_MAG2] == ELFMAG2 &&
+            ehdr->e_ident[EI_MAG3] == ELFMAG3)
+        {
+                return 1; // 是ELF文件
         }
 
-        return 0;
+        return 0; // 不是ELF文件
 }
 
 /* Overview:
@@ -41,34 +43,35 @@ int is_elf_format(u_char *binary)
  */
 int readelf(u_char *binary, int size)
 {
-        Elf32_Ehdr *ehdr = (Elf32_Ehdr *)binary;
+        Elf32_Ehdr *ehdr = (Elf32_Ehdr *)binary; // Pointer to ELF header
 
         int Nr;
 
-        Elf32_Shdr *shdr = NULL;
+        Elf32_Shdr *shdr = NULL; // Pointer to section header
 
-        u_char *ptr_sh_table = NULL;
-        Elf32_Half sh_entry_count;
-        Elf32_Half sh_entry_size;
+        u_char *ptr_sh_table = NULL; // Start address of section header table
+        Elf32_Half sh_entry_count;    // Number of section headers
+        Elf32_Half sh_entry_size;     // Size of each section header
 
-
-        // check whether `binary` is a ELF file.
-        if (size < 4 || !is_elf_format(binary)) {
+        // Check if this is actually an ELF file
+        if (size < 4 || !is_elf_format(binary))
+        {
                 printf("not a standard elf format\n");
                 return 0;
         }
 
-        // get section table addr, section header number and section header size.
-        ptr_sh_table   = binary + ehdr->e_shoff; // 偏移
-        sh_entry_count = ehdr->e_shnum; // 计数
-        sh_entry_size  = ehdr->e_shentsize; // 大小
-        // for each section header, output section number and section addr.
-        for (Nr = 0; Nr < sh_entry_count; Nr++) {
-            shdr = (Elf32_Shdr *)(ptr_sh_table + Nr * sh_entry_size);
-            /* 序号用 %d，地址用 0x%x */
-            printf("%d:0x%x\n", Nr, shdr->sh_addr);
+        // Grab section header table info from the ELF header
+        ptr_sh_table = binary + ehdr->e_shoff; // Offset to section header table
+        sh_entry_count = ehdr->e_shnum;        // How many section headers
+        sh_entry_size = ehdr->e_shentsize;     // Size of each section header
+
+        // Loop through all section headers and print their index and address
+        for (Nr = 0; Nr < sh_entry_count; Nr++)
+        {
+                shdr = (Elf32_Shdr *)(ptr_sh_table + Nr * sh_entry_size);
+                // Print section number and address
+                printf("%d:0x%x\n", Nr, shdr->sh_addr);
         }
 
         return 0;
 }
-

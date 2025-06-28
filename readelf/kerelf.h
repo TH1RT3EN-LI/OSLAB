@@ -21,131 +21,124 @@
 #ifndef _KER_ELF_H
 #define _KER_ELF_H
 
-/* ELF defination file from GNU C Library. We simplefied this
- * file for our lab, removing definations about ELF64, structs and
- * enums which we don't care.
- */
-
 #include "types.h"
 
-typedef u_int64_t               uint64_t;
-typedef u_int32_t               uint32_t;
-typedef u_int16_t               uint16_t;
+// 基本类型定义
+typedef u_int64_t uint64_t;
+typedef u_int32_t uint32_t;
+typedef u_int16_t uint16_t;
 
-/* Type for a 16-bit quantity.  */
+/* 16位数量类型 */
 typedef uint16_t Elf32_Half;
 
-/* Types for signed and unsigned 32-bit quantities.  */
+/* 有符号和无符号32位数量类型 */
 typedef uint32_t Elf32_Word;
-typedef int32_t  Elf32_Sword;
+typedef int32_t Elf32_Sword;
 
-/* Types for signed and unsigned 64-bit quantities.  */
+/* 有符号和无符号64位数量类型 */
 typedef uint64_t Elf32_Xword;
-typedef int64_t  Elf32_Sxword;
+typedef int64_t Elf32_Sxword;
 
-/* Type of addresses.  */
+/* 地址类型 */
 typedef uint32_t Elf32_Addr;
 
-/* Type of file offsets.  */
+/* 文件偏移类型 */
 typedef uint32_t Elf32_Off;
 
-/* Type for section indices, which are 16-bit quantities.  */
+/* 段索引类型，16位 */
 typedef uint16_t Elf32_Section;
 
-/* Type of symbol indices.  */
+/* 符号索引类型 */
 typedef uint32_t Elf32_Symndx;
 
+/* ELF文件头。每个ELF文件开头都出现此结构体 */
 
-/* The ELF file header.  This appears at the start of every ELF file.  */
+#define EI_NIDENT (16) // ELF头部标识字节数
 
-#define EI_NIDENT (16)
-
-typedef struct {
-        unsigned char   e_ident[EI_NIDENT];     /* Magic number and other info */
-        Elf32_Half      e_type;                 /* Object file type */
-        Elf32_Half      e_machine;              /* Architecture */
-        Elf32_Word      e_version;              /* Object file version */
-        Elf32_Addr      e_entry;                /* Entry point virtual address */
-        Elf32_Off       e_phoff;                /* Program header table file offset */
-        Elf32_Off       e_shoff;                /* Section header table file offset */
-        Elf32_Word      e_flags;                /* Processor-specific flags */
-        Elf32_Half      e_ehsize;               /* ELF header size in bytes */
-        Elf32_Half      e_phentsize;            /* Program header table entry size */
-        Elf32_Half      e_phnum;                /* Program header table entry count */
-        Elf32_Half      e_shentsize;            /* Section header table entry size */
-        Elf32_Half      e_shnum;                /* Section header table entry count */
-        Elf32_Half      e_shstrndx;             /* Section header string table index */
+typedef struct
+{
+        unsigned char e_ident[EI_NIDENT]; /* 魔数和其他信息 */
+        Elf32_Half e_type;                /* 文件类型 */
+        Elf32_Half e_machine;             /* 架构类型 */
+        Elf32_Word e_version;             /* 版本号 */
+        Elf32_Addr e_entry;               /* 程序入口虚拟地址 */
+        Elf32_Off e_phoff;                /* 程序头表文件偏移 */
+        Elf32_Off e_shoff;                /* 节区头表文件偏移 */
+        Elf32_Word e_flags;               /* 处理器相关标志 */
+        Elf32_Half e_ehsize;              /* ELF头部大小（字节） */
+        Elf32_Half e_phentsize;           /* 程序头表项大小 */
+        Elf32_Half e_phnum;               /* 程序头表项数量 */
+        Elf32_Half e_shentsize;           /* 节区头表项大小 */
+        Elf32_Half e_shnum;               /* 节区头表项数量 */
+        Elf32_Half e_shstrndx;            /* 节区头字符串表索引 */
 } Elf32_Ehdr;
 
-/* Fields in the e_ident array.  The EI_* macros are indices into the
-   array.  The macros under each EI_* macro are the values the byte
-   may have.  */
+/* e_ident数组中的字段。EI_*宏是数组的索引。
+        每个EI_*下的宏是该字节可能的值。 */
 
-#define EI_MAG0         0               /* File identification byte 0 index */
-#define ELFMAG0         0x7f            /* Magic number byte 0 */
+#define EI_MAG0 0    /* 文件标识字节0索引 */
+#define ELFMAG0 0x7f /* 魔数字节0 */
 
-#define EI_MAG1         1               /* File identification byte 1 index */
-#define ELFMAG1         'E'             /* Magic number byte 1 */
+#define EI_MAG1 1   /* 文件标识字节1索引 */
+#define ELFMAG1 'E' /* 魔数字节1 */
 
-#define EI_MAG2         2               /* File identification byte 2 index */
-#define ELFMAG2         'L'             /* Magic number byte 2 */
+#define EI_MAG2 2   /* 文件标识字节2索引 */
+#define ELFMAG2 'L' /* 魔数字节2 */
 
-#define EI_MAG3         3               /* File identification byte 3 index */
-#define ELFMAG3         'F'             /* Magic number byte 3 */
+#define EI_MAG3 3   /* 文件标识字节3索引 */
+#define ELFMAG3 'F' /* 魔数字节3 */
 
+/* 节区头结构体 */
+typedef struct
+{
+        Elf32_Word sh_name;      /* 节区名称 */
+        Elf32_Word sh_type;      /* 节区类型 */
+        Elf32_Word sh_flags;     /* 节区标志 */
+        Elf32_Addr sh_addr;      /* 节区地址 */
+        Elf32_Off sh_offset;     /* 节区偏移 */
+        Elf32_Word sh_size;      /* 节区大小 */
+        Elf32_Word sh_link;      /* 节区链接信息 */
+        Elf32_Word sh_info;      /* 节区附加信息 */
+        Elf32_Word sh_addralign; /* 节区对齐 */
+        Elf32_Word sh_entsize;   /* 节区项大小 */
+} Elf32_Shdr;
 
-/* Section segment header.  */
-typedef struct{
-        Elf32_Word sh_name;                 /* Section name */
-        Elf32_Word sh_type;                 /* Section type */
-        Elf32_Word sh_flags;                /* Section flags */
-        Elf32_Addr sh_addr;                 /* Section addr */
-        Elf32_Off  sh_offset;               /* Section offset */
-        Elf32_Word sh_size;                 /* Section size */
-        Elf32_Word sh_link;                 /* Section link */
-        Elf32_Word sh_info;                 /* Section extra info */
-        Elf32_Word sh_addralign;            /* Section alignment */
-        Elf32_Word sh_entsize;              /* Section entry size */
-}Elf32_Shdr;
+/* 程序段头结构体 */
 
-
-/* Program segment header.  */
-
-typedef struct {
-        Elf32_Word      p_type;                 /* Segment type */
-        Elf32_Off       p_offset;               /* Segment file offset */
-        Elf32_Addr      p_vaddr;                /* Segment virtual address */
-        Elf32_Addr      p_paddr;                /* Segment physical address */
-        Elf32_Word      p_filesz;               /* Segment size in file */
-        Elf32_Word      p_memsz;                /* Segment size in memory */
-        Elf32_Word      p_flags;                /* Segment flags */
-        Elf32_Word      p_align;                /* Segment alignment */
+typedef struct
+{
+        Elf32_Word p_type;   /* 段类型 */
+        Elf32_Off p_offset;  /* 段在文件中的偏移 */
+        Elf32_Addr p_vaddr;  /* 段虚拟地址 */
+        Elf32_Addr p_paddr;  /* 段物理地址 */
+        Elf32_Word p_filesz; /* 段在文件中的大小 */
+        Elf32_Word p_memsz;  /* 段在内存中的大小 */
+        Elf32_Word p_flags;  /* 段标志 */
+        Elf32_Word p_align;  /* 段对齐 */
 } Elf32_Phdr;
 
+/* p_type（段类型）的合法值 */
 
-/* Legal values for p_type (segment type).  */
+#define PT_NULL 0            /* 未使用的程序头表项 */
+#define PT_LOAD 1            /* 可加载程序段 */
+#define PT_DYNAMIC 2         /* 动态链接信息 */
+#define PT_INTERP 3          /* 程序解释器 */
+#define PT_NOTE 4            /* 辅助信息 */
+#define PT_SHLIB 5           /* 保留 */
+#define PT_PHDR 6            /* 程序头表自身的入口 */
+#define PT_NUM 7             /* 已定义类型数量 */
+#define PT_LOOS 0x60000000   /* OS专用范围起始 */
+#define PT_HIOS 0x6fffffff   /* OS专用范围结束 */
+#define PT_LOPROC 0x70000000 /* 处理器专用范围起始 */
+#define PT_HIPROC 0x7fffffff /* 处理器专用范围结束 */
 
-#define PT_NULL         0               /* Program header table entry unused */
-#define PT_LOAD         1               /* Loadable program segment */
-#define PT_DYNAMIC      2               /* Dynamic linking information */
-#define PT_INTERP       3               /* Program interpreter */
-#define PT_NOTE         4               /* Auxiliary information */
-#define PT_SHLIB        5               /* Reserved */
-#define PT_PHDR         6               /* Entry for header table itself */
-#define PT_NUM          7               /* Number of defined types.  */
-#define PT_LOOS         0x60000000      /* Start of OS-specific */
-#define PT_HIOS         0x6fffffff      /* End of OS-specific */
-#define PT_LOPROC       0x70000000      /* Start of processor-specific */
-#define PT_HIPROC       0x7fffffff      /* End of processor-specific */
+/* p_flags（段标志）的合法值 */
 
-/* Legal values for p_flags (segment flags).  */
+#define PF_X (1 << 0)          /* 可执行段 */
+#define PF_W (1 << 1)          /* 可写段 */
+#define PF_R (1 << 2)          /* 可读段 */
+#define PF_MASKPROC 0xf0000000 /* 处理器专用 */
 
-#define PF_X            (1 << 0)        /* Segment is executable */
-#define PF_W            (1 << 1)        /* Segment is writable */
-#define PF_R            (1 << 2)        /* Segment is readable */
-#define PF_MASKPROC     0xf0000000      /* Processor-specific */
-
-int readelf(u_char *binary,int size);
+int readelf(u_char *binary, int size);
 
 #endif /* kerelf.h */
-

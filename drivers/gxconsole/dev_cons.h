@@ -10,10 +10,14 @@
 
 
 //#define	DEV_CONS_ADDRESS		0x180003f8
+// 控制台设备的基地址
 #define	DEV_CONS_ADDRESS		0x10000000
+// 控制台设备的长度
 #define	DEV_CONS_LENGTH			0x0000000000000020
-#define	    DEV_CONS_PUTGETCHAR		    0x0000
-#define	    DEV_CONS_HALT		    0x0010
+// 控制台设备的读写字符寄存器偏移
+#define	DEV_CONS_PUTGETCHAR		0x0000
+// 控制台设备的关机寄存器偏移
+#define	DEV_CONS_HALT			0x0010
 
 
 #endif	/*  TESTMACHINE_CONS_H  */

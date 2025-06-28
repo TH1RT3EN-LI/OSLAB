@@ -5,21 +5,20 @@
 #include <kclock.h>
 #include <trap.h>
 
-
+// MIPS 初始化函数
 void mips_init()
 {
-	printf("init.c:\tmips_init() is called\n");
+	printf("init.c:\tmips_init() is called\n"); 
 
-
-	//for your degree,don't delete these.
+	// 为了你的学位，不要删除这些。
 	//------------|
 	#ifdef FTEST
-	FTEST();
+	FTEST(); // 如果定义了FTEST，调用FTEST函数
 	#endif
 
 	#ifdef PTEST
-	ENV_CREATE(PTEST);
+	ENV_CREATE(PTEST); // 如果定义了PTEST，创建PTEST环境
 	#endif
 	//-----------|
-	panic("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+	panic("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"); // 抛出异常，终止程序
 }
