@@ -8,7 +8,7 @@ extern int readelf(u_char* binary, int size);
         params:
                 argc: the number of parameters
                 argv: array of parameters, argv[1] shuold be the file name.
-
+.
 */
 int main(int argc,char *argv[])
 {
