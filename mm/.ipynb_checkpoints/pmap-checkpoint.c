@@ -425,7 +425,7 @@ page_remove(Pde *pgdir, u_long va)
     /* Step 2: Decrease `pp_ref` and decide if it's necessary to free this page. */
 
     /* Hint: When there's no virtual address mapped to this page, release it. */
-    ppage->pp_ref--;//只是将绑定解出,只有当pp_ref=0的时候才将该页放入page_free_list
+    ppage->pp_ref--;
     if (ppage->pp_ref == 0) {
         page_free(ppage);
     }
