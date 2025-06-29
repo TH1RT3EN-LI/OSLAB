@@ -151,6 +151,8 @@ void boot_map_segment(Pde *pgdir, u_long va, u_long size, u_long pa, int perm)
     You can get more details about `UPAGES` and `UENVS` in include/mmu.h. */
 void mips_vm_init()
 {
+	// mCONTEXT is a global variable which is used to store the address of the page directory, strange name
+	// end is a global variable which is used to store the end address of the kernel.
     extern char end[];
     extern int mCONTEXT;
     extern struct Env *envs;
@@ -160,27 +162,36 @@ void mips_vm_init()
 
 
     /* Step 1: Allocate a page for page directory(first level page table). */
-    pgdir = alloc(BY2PG, BY2PG, 1);
+	// alloc function is used to allocate memory, it takes three parameters: 
+	// 1. the size of memory to be allocated,
+	// 2. the alignment of memory to be allocated
+	// 3. whether to clear the allocated memory or not.
+    pgdir = alloc(BY2PG, BY2PG, 1); // set the page directory to be aligned to BY2PG.
     printf("to memory %x for struct page directory.\n", freemem);
-    mCONTEXT = (int)pgdir;
+    mCONTEXT = (int)pgdir;  
 
-    boot_pgdir = pgdir;
+	// boot_pgdir is used to store the address of the page directory used in boot
+    boot_pgdir = pgdir; 
 
     /* Step 2: Allocate proper size of physical memory for global array `pages`,
      * for physical memory management. Then, map virtual address `UPAGES` to
      * physical address `pages` allocated before. For consideration of alignment,
      * you should round up the memory size before map. */
+	// UPAGES = 0x7f80 0000, seems the start address of the page directory. 
+	// create a mapping start from UPAGES to the physical address of pages, with permission PTE_R
+	// PTE_R is 0x0400, 0 means only read permission, 1 means write permission.
     pages = (struct Page *)alloc(npage * sizeof(struct Page), BY2PG, 1);
     printf("to memory %x for struct Pages.\n", freemem);
     n = ROUND(npage * sizeof(struct Page), BY2PG);
     boot_map_segment(pgdir, UPAGES, n, PADDR(pages), PTE_R);
 
+
     /* Step 3, Allocate proper size of physical memory for global array `envs`,
      * for process management. Then map the physical address to `UENVS`. */
+	// NENV is the number of environments.
     envs = (struct Env *)alloc(NENV * sizeof(struct Env), BY2PG, 1);
     n = ROUND(NENV * sizeof(struct Env), BY2PG);
     boot_map_segment(pgdir, UENVS, n, PADDR(envs), PTE_R);
-	// printf("to memory %x for strut Envs.\n", freemem); // by myself.
 
     printf("pmap.c:\t mips vm init success\n");
 }

@@ -13,7 +13,7 @@
 #include <asm/cp0regdef.h>
 #include <asm/asm.h>
 .section .text.exc_vec3
-NESTED(except_vec3, 0, sp)
+NESTED(except_vec3, 0, sp) // the entry point of the exception vector 3
 		.set	noat
 		.set	noreorder
 		/*
@@ -31,7 +31,7 @@ NESTED(except_vec3, 0, sp)
 		 * to implement software exceptions in the future.
 		 */
 
-		andi	k1,0x7c
+		andi	k1,0x7c 
 		addu	k0,k1
 		lw	k0,(k0)
 		NOP
@@ -41,8 +41,8 @@ NESTED(except_vec3, 0, sp)
 		.set	at
 
 
-.data
-			.globl mCONTEXT
+.data // get ready for data section, set 3 global variables to 0
+			.globl mCONTEXT 
 mCONTEXT:
 			.word 0
 
@@ -50,17 +50,18 @@ mCONTEXT:
 delay:
 			.word 0
 
-			.globl tlbra
+			.globl tlbra 
 tlbra:
 			.word 0
 
-			.section .data.stk
-KERNEL_STACK:
-			.space 0x8000
+// Create a new section for stack data
+			.section .data.stk // means this section is for stack Deallocate
 
+KERNEL_STACK:           # Reserve space for the kernel stack
+			.space 0x8000   # Allocate 32KB for the stack
 
-			.text
-LEAF(_start)
+			.text           # Switch back to the code section
+LEAF(_start) // it should be the entry point of the kernel, the first function to be executed
 	
 	.set	mips2
 	.set	reorder
@@ -79,15 +80,15 @@ LEAF(_start)
 	mtc0	t0, CP0_CONFIG
 
 	/* set up stack */
-	li	sp, 0x80400000
+	li	sp, 0x80400000 // stack started from 0x80400000
 
-	li		t0,0x80400000
-	sw		t0,mCONTEXT
+	li		t0,0x80400000 
+	sw		t0,mCONTEXT // save the initial stack pointer to mCONTEXT, so the C code can use it later
 	
 	/* jump to main */
 	jal	main
 			
-loop:
+loop: // I think this loop is used to keep the kernel running, so that it can handle interrupts and other events
 	j	loop
 	nop
 END(_start)

@@ -17,10 +17,10 @@
 	.text
 LEAF(set_timer)
 
-	li t0, 0x01
-	sb t0, 0xb5000100
-	sw	sp, KERNEL_SP
-setup_c0_status STATUS_CU0|0x1001 0
+	li t0, 0x01 // set the timer interrupt enable bit
+	sb t0, 0xb5000100 // write to the timer control register
+	sw	sp, KERNEL_SP // save the current stack pointer to KERNEL_SP
+setup_c0_status STATUS_CU0|0x1001 0 // set the CP0 status register to enable user mode and interrupts, like before
 	jr ra
 
 	nop

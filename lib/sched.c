@@ -9,7 +9,7 @@
  *  and switch to the first such environment found.
  *
  * Hints:
- *  The variable which is for counting should be defined as 'static'.
+ *  The variable which is for remain_time_slicesing should be defined as 'static'.
  */
 
 extern struct Env_list env_sched_list[];
@@ -17,58 +17,47 @@ extern struct Env *curenv;
 
 void sched_yield(void)
 {
-	/*
-	//printf("Sched_yield happen\n");
-	static u_int cur_lasttime = 1;
-	struct Env *next_env;
-	cur_lasttime--;
-	if (cur_lasttime == 0 || curenv == NULL)
-	{
-		if (curenv != NULL)
-		{
-			LIST_INSERT_TAIL(&env_sched_list[1], curenv, env_sched_link);
-		}
-		if (!LIST_EMPTY(&env_sched_list[0]))
-		{
-			next_env = LIST_FIRST(&env_sched_list[0]);
-			LIST_REMOVE(next_env, env_sched_link);
-		}
-		else
-		{
-			next_env = LIST_FIRST(&env_sched_list[1]);
-			LIST_REMOVE(next_env, env_sched_link);
-		}
-		cur_lasttime = next_env->env_pri;
-		//printf("%x %x\n",curenv, next_env);
-		env_run(next_env);
+	static int remain_time_slices = 0; // remaining time slices of current env
+	static int shed_level = 0; // current env_sched_list index, 0 or 1
+
+	struct Env *e = curenv;
+
+	// If current env still has time slices and is runnable, continue running it
+	if (remain_time_slices > 0 && e && e->env_status == ENV_RUNNABLE) {
+		remain_time_slices--;
+		env_run(e);
+		return;
 	}
-	env_run(curenv);
-	//printf("%x",*((int*)(TF_EPC + TIMESTACK - TF_SIZE)));
-	//printf("Sched_yield End\n");
-	*/
-	static u_int cur_lasttime = 1;
-	static int cur_head_index = 0;
-	struct Env *next_env;
-	cur_lasttime--;
-	if (cur_lasttime == 0 || curenv == NULL)
-	{
-		if (curenv != NULL)
-		{
-			LIST_INSERT_HEAD(&env_sched_list[!cur_head_index], curenv, env_sched_link);
-		}
-		if (LIST_EMPTY(&env_sched_list[cur_head_index]))
-		{
-			cur_head_index = !cur_head_index;
-		}
-		if (LIST_EMPTY(&env_sched_list[cur_head_index]))
-		{
-			panic("^^^^^^No env is RUNNABLE!^^^^^^");
-		}
-		next_env = LIST_FIRST(&env_sched_list[cur_head_index]);
-		LIST_REMOVE(next_env, env_sched_link);
-		cur_lasttime = next_env->env_pri;
-		env_run(next_env);
+
+	// Move current env to the tail if it's not runnable
+	if (e) {
+		LIST_REMOVE(e, env_sched_link);
+		LIST_INSERT_TAIL(&env_sched_list[1 - shed_level], e, env_sched_link);
 	}
-	env_run(curenv);
-	panic("^^^^^^sched yield reached end^^^^^^");
+
+	// Try to find a runnable env in current list
+	while (1) {
+		if (LIST_EMPTY(&env_sched_list[shed_level])) {
+			shed_level = 1 - shed_level;
+			if (LIST_EMPTY(&env_sched_list[shed_level])) { // if both lists are empty, panic, this should not happen
+				// panic("empty empty empty env_sched_list");
+				return ; // or return, no runnable env found
+			}
+		}
+
+		e = LIST_FIRST(&env_sched_list[shed_level]);
+		if (!e) continue; // if no env found, continue to next iteration
+
+		if (e->env_status == ENV_RUNNABLE) {
+			break;
+		} else if (e->env_status == ENV_NOT_RUNNABLE) {
+			LIST_REMOVE(e, env_sched_link);
+			LIST_INSERT_TAIL(&env_sched_list[1 - shed_level], e, env_sched_link);
+		} else if (e->env_status == ENV_FREE) {
+			LIST_REMOVE(e, env_sched_link);
+		}
+	}
+
+	remain_time_slices = e->env_pri > 0 ? e->env_pri - 1 : 0;
+	env_run(e);
 }
